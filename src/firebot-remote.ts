@@ -18,6 +18,10 @@ export class FirebotRemote {
       });
     });
 
+    this.#client.on("disconnected", () => {
+      logger.info("Disconnected from Stoat");
+    });
+
     this.#client.on("messageCreate", async (message) => {
       eventManager.triggerEvent(STOAT_INTEGRATION_ID, FirebotEvents.Message, {
         ...this.#getUserMetadata("stoatBot", this.#client.user),
