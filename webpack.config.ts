@@ -1,6 +1,6 @@
-const path = require("path");
 const TerserPlugin = require("terser-webpack-plugin");
-const packageJson = require("./package.json");
+import { resolve } from "path";
+import * as packageJson from "./package.json";
 
 module.exports = {
   target: "node",
@@ -12,7 +12,7 @@ module.exports = {
   output: {
     libraryTarget: "commonjs2",
     libraryExport: "default",
-    path: path.resolve(__dirname, "./dist"),
+    path: resolve(__dirname, "./dist"),
     filename: `${packageJson.scriptOutputName}.js`,
   },
   resolve: {
@@ -27,8 +27,7 @@ module.exports = {
     ],
   },
   optimization: {
-    minimize: true,
-
+    minimize: process.env.NODE_ENV === "production",
     minimizer: [
       new TerserPlugin({
         terserOptions: {

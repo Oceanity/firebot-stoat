@@ -12,9 +12,9 @@ type Props = {
 export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
   definition: {
     id: "send-chat-message",
-    name: "Send Stoat Message",
+    name: "Send Stoat Messages",
     description: "Sends a message to the specified Stoat server/channel",
-    icon: "fa fa-message",
+    icon: "fad fa-comment-lines",
     categories: ["integrations"],
     outputs: [],
   },
