@@ -1,33 +1,58 @@
-import { Firebot } from "@crowbartools/firebot-custom-scripts-types";
+import {
+  Firebot,
+  Integration,
+} from "@crowbartools/firebot-custom-scripts-types";
+import { initModules } from "@oceanity/firebot-helpers/firebot";
+import {
+  STOAT_EVENT_SOURCE,
+  STOAT_INTEGRATION_AUTHOR,
+  STOAT_INTEGRATION_DEFINITION,
+  STOAT_INTEGRATION_DESCRIPTION,
+  STOAT_INTEGRATION_FIREBOT_VERSION,
+  STOAT_INTEGRATION_ID,
+  STOAT_INTEGRATION_NAME_AND_AUTHOR,
+  STOAT_INTEGRATION_VERSION,
+} from "./constants";
+import { AllStoatEffectTypes } from "./effects";
+import { StoatIntegration } from "./stoat-integration";
+import { registerStoatVariables } from "./stoat-variables";
+import { StoatIntegrationSettings } from "./types";
 
-interface Params {
-  message: string;
-}
+export let stoat: StoatIntegration;
 
-const script: Firebot.CustomScript<Params> = {
+const script: Firebot.CustomScript<{}> = {
   getScriptManifest: () => {
     return {
-      name: "Starter Custom Script",
-      description: "A starter custom script for build",
-      author: "SomeDev",
-      version: "1.0",
-      firebotVersion: "5",
+      name: STOAT_INTEGRATION_NAME_AND_AUTHOR,
+      description: STOAT_INTEGRATION_DESCRIPTION,
+      author: STOAT_INTEGRATION_AUTHOR,
+      version: STOAT_INTEGRATION_VERSION,
+      firebotVersion: STOAT_INTEGRATION_FIREBOT_VERSION,
     };
   },
-  getDefaultParameters: () => {
-    return {
-      message: {
-        type: "string",
-        default: "Hello World!",
-        description: "Message",
-        secondaryDescription: "Enter a message here",
-        title: "Hello!",
-      },
-    };
-  },
+  getDefaultParameters: () => ({}),
   run: (runRequest) => {
-    const { logger } = runRequest.modules;
-    logger.info(runRequest.parameters.message);
+    initModules(runRequest.modules);
+
+    stoat = new StoatIntegration();
+
+    runRequest.modules.eventManager.registerEventSource(STOAT_EVENT_SOURCE);
+
+    const integration: Integration<StoatIntegrationSettings> = {
+      definition: STOAT_INTEGRATION_DEFINITION,
+      integration: stoat,
+    };
+    runRequest.modules.integrationManager.registerIntegration(integration);
+
+    for (const effectType of AllStoatEffectTypes) {
+      effectType.definition.id = `${STOAT_INTEGRATION_ID}:${effectType.definition.id}`;
+      runRequest.modules.effectManager.registerEffect(effectType as any);
+    }
+
+    registerStoatVariables(
+      runRequest.modules.replaceVariableFactory,
+      runRequest.modules.replaceVariableManager,
+    );
   },
 };
 
