@@ -5,7 +5,9 @@ import {
 } from "@crowbartools/firebot-custom-scripts-types";
 import { logger } from "@oceanity/firebot-helpers/firebot";
 import { Client } from "stoat.js";
+import { setTimeout } from "timers";
 import { TypedEmitter } from "tiny-typed-emitter";
+import { STOAT_RECONNECT_TIMEOUT } from "./constants";
 import { FirebotRemote } from "./firebot-remote";
 import { StoatIntegrationSettings } from "./types";
 
@@ -85,8 +87,21 @@ export class StoatIntegration
         });
       });
 
+      this.client.on("disconnected", () => {
+        logger.warn(
+          `Stoat: Connection lost, reconnecting in ${STOAT_RECONNECT_TIMEOUT / 1000} seconds`,
+        );
+
+        setTimeout(() => this.#initStoatClient, STOAT_RECONNECT_TIMEOUT);
+      });
+
       this.client.on("error", (error) => {
-        logger.error(`Stoat: Unexpected error`, error);
+        logger.error(
+          `Stoat: Connection error, reconnecting in ${STOAT_RECONNECT_TIMEOUT / 1000} seconds`,
+          error,
+        );
+
+        setTimeout(() => this.#initStoatClient, STOAT_RECONNECT_TIMEOUT);
       });
 
       this.client.loginBot(token);
