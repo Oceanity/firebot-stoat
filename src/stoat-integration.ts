@@ -5,7 +5,6 @@ import {
 } from "@crowbartools/firebot-custom-scripts-types";
 import { logger } from "@oceanity/firebot-helpers/firebot";
 import { Client } from "stoat.js";
-import { setTimeout } from "timers";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { STOAT_RECONNECT_TIMEOUT } from "./constants";
 import { FirebotRemote } from "./firebot-remote";
@@ -24,7 +23,9 @@ export class StoatIntegration
   connected: boolean = false;
   client?: Client;
 
+  #token: string;
   #remote: FirebotRemote;
+  #timeoutId?: NodeJS.Timeout;
 
   init(
     _linked: boolean,
@@ -40,6 +41,12 @@ export class StoatIntegration
   }
 
   #initStoatClient(settings?: StoatIntegrationSettings) {
+    logger.info("Stoat: Initializing the Stoat Integration...");
+
+    if (this.#timeoutId) {
+      clearTimeout(this.#timeoutId);
+    }
+
     if (this.client) {
       try {
         this.client.user.edit({
@@ -56,17 +63,17 @@ export class StoatIntegration
       }
     }
 
-    const token = settings?.auth?.token;
+    if (settings) {
+      this.#token = settings?.auth?.token ?? this.#token;
+    }
 
-    if (!token) {
+    if (!this.#token) {
       logger.warn(
         "Missing required setting 'Token', cannot initialize Stoat Client",
       );
 
       return;
     }
-
-    logger.info("Stoat: Logging in to Stoat Bot");
 
     try {
       this.client = new Client();
@@ -78,33 +85,12 @@ export class StoatIntegration
         logger.info(
           `Stoat: Logged in to Stoat bot as ${this.client.user.displayName}`,
         );
-
-        this.client.user.edit({
-          status: {
-            text: "Firebot Integration by Oceanity",
-            presence: "Focus",
-          },
-        });
       });
 
-      this.client.on("disconnected", () => {
-        logger.warn(
-          `Stoat: Connection lost, reconnecting in ${STOAT_RECONNECT_TIMEOUT / 1000} seconds`,
-        );
+      this.client.on("disconnected", this.#onDisconnect);
+      this.client.on("error", this.#onError);
 
-        setTimeout(() => this.#initStoatClient, STOAT_RECONNECT_TIMEOUT);
-      });
-
-      this.client.on("error", (error) => {
-        logger.error(
-          `Stoat: Connection error, reconnecting in ${STOAT_RECONNECT_TIMEOUT / 1000} seconds`,
-          error,
-        );
-
-        setTimeout(() => this.#initStoatClient, STOAT_RECONNECT_TIMEOUT);
-      });
-
-      this.client.loginBot(token);
+      this.client.loginBot(this.#token);
     } catch (error) {
       if (this.connected) {
         this.connected = false;
@@ -113,7 +99,27 @@ export class StoatIntegration
       logger.error("Error connecting to Stoat bot", error);
       return;
     }
-
-    // Event Hooks
   }
+
+  #reconnect = () => {
+    if (!this.#timeoutId) {
+      logger.info(
+        `Stoat: Attempting to reconnect in ${STOAT_RECONNECT_TIMEOUT / 1000} seconds...`,
+      );
+      this.#timeoutId = setTimeout(
+        () => this.#initStoatClient,
+        STOAT_RECONNECT_TIMEOUT,
+      );
+    }
+  };
+
+  #onError = (error: Error) => {
+    logger.error("Stoat: Client has encountered an error", error);
+    this.#reconnect();
+  };
+
+  #onDisconnect = () => {
+    logger.warn("Stoat: Lost connection to Stoat server");
+    this.#reconnect();
+  };
 }

@@ -12,7 +12,6 @@ export class FirebotRemote {
 
   init() {
     this.#client.on("ready", () => {
-      logger.info(JSON.stringify(this.#client.user));
       eventManager.triggerEvent(STOAT_INTEGRATION_ID, FirebotEvents.Connected, {
         ...this.#getUserMetadata("stoatBot", this.#client.user),
       });

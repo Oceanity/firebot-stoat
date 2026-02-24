@@ -14,6 +14,7 @@ import {
   STOAT_INTEGRATION_VERSION,
 } from "./constants";
 import { AllStoatEffectTypes } from "./effects";
+import { initFrontendCommunicator } from "./frontend-events";
 import { StoatIntegration } from "./stoat-integration";
 import { registerStoatVariables } from "./stoat-variables";
 import { StoatIntegrationSettings } from "./types";
@@ -33,6 +34,8 @@ const script: Firebot.CustomScript<{}> = {
   getDefaultParameters: () => ({}),
   run: (runRequest) => {
     initModules(runRequest.modules);
+
+    initFrontendCommunicator(runRequest.modules.frontendCommunicator);
 
     stoat = new StoatIntegration();
 

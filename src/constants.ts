@@ -17,7 +17,7 @@ export const STOAT_INTEGRATION_FIREBOT_VERSION = "5";
 export const STOAT_INTEGRATION_PACKAGE_URL =
   "https://raw.githubusercontent.com/Oceanity/firebot-stoat/refs/heads/main/package.json";
 
-export const STOAT_RECONNECT_TIMEOUT = 60000;
+export const STOAT_RECONNECT_TIMEOUT = 15000;
 
 export const STOAT_INTEGRATION_DEFINITION: IntegrationDefinition<StoatIntegrationSettings> =
   {
