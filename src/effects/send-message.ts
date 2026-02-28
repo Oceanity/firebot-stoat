@@ -8,6 +8,7 @@ type Props = {
   session?: string;
   selectedServer?: string;
   selectedChannel?: string;
+  sendAsReply?: boolean;
 };
 
 export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
@@ -56,9 +57,22 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
         placeholder-text="Chat message"
         rows="3"
         cols="40" />
+
+      <div style="display: flex; flex-direction: row; gap: 10px 20px; flex-wrap: wrap; margin: 10px 0;">
+        <firebot-checkbox
+          ng-if="isMessageEvent"
+          label="Send as reply"
+          model="effect.sendAsReply"
+          tooltip="Sends as a reply to the associated Stoat message from the Message event" />
+      </div>
     </eos-container>
   `,
   optionsController: ($scope, backendCommunicator: any) => {
+    $scope.isMessageEvent =
+      $scope.trigger === "event" &&
+      //@ts-expect-error ts(2339)
+      ["oceanity:stoat:message"].includes($scope.triggerMeta?.triggerId);
+
     $scope.getServers = (): void => {
       backendCommunicator
         .fireEventAsync("stoat:get-servers")
@@ -100,11 +114,7 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
       // custom: "Manually enter a name",
     };
 
-    if (
-      $scope.trigger === "event" &&
-      //@ts-expect-error ts(2339)
-      ["oceanity:stoat:message"].includes($scope.triggerMeta?.triggerId)
-    ) {
+    if ($scope.isMessageEvent) {
       $scope.selectModes = {
         associated: "Associated Stoat Channel",
         ...($scope.selectModes as Object),
@@ -130,6 +140,18 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
   },
   onTriggerEvent: async ({ effect, trigger }) => {
     try {
+      const message = {
+        content: effect.message,
+        replies: !!effect.sendAsReply
+          ? [
+              {
+                id: (trigger.metadata.eventData.stoatMessageId as string) ?? "",
+                mention: true,
+                fail_if_not_exists: false,
+              },
+            ]
+          : undefined,
+      };
       switch (effect.selectMode) {
         case "associated": {
           if (!trigger.metadata.eventData.stoatChannelId) {
@@ -142,7 +164,7 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
             `${trigger.metadata.eventData.stoatChannelId}`,
           );
 
-          await channel.sendMessage(effect.message);
+          await channel.sendMessage(message);
 
           break;
         }
@@ -150,7 +172,7 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
         case "list": {
           await stoat.client?.channels
             .get(effect.selectedChannel)
-            .sendMessage(effect.message);
+            .sendMessage(message);
 
           break;
         }

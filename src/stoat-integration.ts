@@ -90,7 +90,7 @@ export class StoatIntegration
       this.client.on("disconnected", this.#onDisconnect);
       this.client.on("error", this.#onError);
 
-      this.client.loginBot(this.#token);
+      this.client.loginBot(this.#token).catch(this.#onError);
     } catch (error) {
       if (this.connected) {
         this.connected = false;
