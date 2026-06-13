@@ -1,15 +1,16 @@
-import { Effects } from "@crowbartools/firebot-custom-scripts-types/types/effects";
-import { logger } from "@oceanity/firebot-helpers/firebot";
+import firebot, { EffectType } from "@crowbartools/firebot-types";
 import { stoat } from "../main";
 
-type Props = {
+type EffectModel = {
   selectMode?: string;
   message?: string;
   session?: string;
-  selectedSession?: string;
+  selectedServer?: string;
+  selectedChannel?: string;
+  sendAsReply?: boolean;
 };
 
-export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
+export const SendMessageEffectType: EffectType<EffectModel> = {
   definition: {
     id: "send-chat-message",
     name: "Send Stoat Messages",
@@ -19,16 +20,27 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
     outputs: [],
   },
   optionsTemplate: `
-    <eos-container header="Channel" pad-bottom="true">
+    <eos-container header="Channel">
       <firebot-select
+        options="selectModes"
         selected="effect.selectMode"
-        options="selectModes" />
+        style="margin-bottom: 20px;" />
 
       <div ng-if="effect.selectMode === 'list'" style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 20px;">
         <firebot-select
-          selected="effect.selectedSession"
-          options="sessions" />
-        <button class="btn btn-link" ng-click="getSessionNames()">Refresh Sessions</button>
+          options="servers"
+          selected="effect.selectedServer"
+          on-update="getChannels()"
+          placeholder="Select a server..." />
+        <button class="btn btn-link" ng-click="getServers()">Refresh servers</button>
+      </div>
+
+      <div ng-if="effect.selectMode === 'list' && !!effect.selectedServer && !!channels" style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 20px;">
+        <firebot-select
+          options="channels"
+          selected="effect.selectedChannel"
+          placeholder="Select a channel..." />
+        <button class="btn btn-link" ng-click="getChannels()">Refresh channels</button>
       </div>
 
       <div ng-if="effect.selectMode === 'custom'" style="margin-bottom: 20px;">
@@ -46,37 +58,81 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
         placeholder-text="Chat message"
         rows="3"
         cols="40" />
+
+      <div style="display: flex; flex-direction: row; gap: 10px 20px; flex-wrap: wrap; margin: 10px 0;">
+        <firebot-checkbox
+          ng-if="isMessageEvent"
+          label="Send as reply"
+          model="effect.sendAsReply"
+          tooltip="Sends as a reply to the associated Stoat message from the Message event" />
+      </div>
     </eos-container>
   `,
   optionsController: ($scope, backendCommunicator: any) => {
-    $scope.getSessionNames = (): void => {
-      backendCommunicator
-        .fireEventAsync("archipelago:getSessionTable")
+    $scope.isMessageEvent =
+      $scope.trigger === "event" &&
+      ["oceanity:stoat:message"].includes($scope.triggerMeta?.triggerId);
+
+    $scope.getServers = async (): Promise<void> => {
+      $scope.servers = backendCommunicator
+        .fireEventAsync("oceanity:stoat:get-servers")
         .then((data: Record<string, string>) => {
-          $scope.sessions = data;
+          $scope.servers = data;
         });
     };
 
-    //@ts-expect-error ts(2349)
-    $scope.getSessionNames();
+    $scope.getServers();
+
+    $scope.getChannels = (): void => {
+      if (!$scope.effect.selectedServer) {
+        return;
+      }
+
+      backendCommunicator
+        .fireEventAsync(
+          "oceanity:stoat:get-channels",
+          $scope.effect.selectedServer,
+        )
+        .then((data: Record<string, string>) => {
+          $scope.channels = data;
+
+          if (
+            !!$scope.effect.selectedChannel &&
+            !Object.keys($scope.channels).includes(
+              $scope.effect.selectedChannel,
+            )
+          ) {
+            // Channel does not exist in server, clear
+            delete $scope.effect.selectedChannel;
+          }
+        });
+    };
+
+    $scope.getChannels();
 
     $scope.selectModes = {
-      associated: "Associated Stoat Channel",
-      // list: "Select from list",
+      list: "Select from list",
       // custom: "Manually enter a name",
     };
 
+    if ($scope.isMessageEvent) {
+      $scope.selectModes = {
+        associated: "Associated Stoat Channel",
+        ...($scope.selectModes as Object),
+      };
+    }
+
     if (!$scope.effect.selectMode) {
-      $scope.effect.selectMode = "associated";
+      $scope.effect.selectMode = Object.keys($scope.selectModes)[0];
     }
   },
   optionsValidator: (effect) => {
     const errors: Array<string> = [];
-    if (effect.selectMode === "list" && !effect.selectedSession) {
-      errors.push("Select a session from the list");
-    }
-    if (effect.selectMode === "custom" && !effect.session) {
-      errors.push("Enter the name of a session");
+    if (
+      effect.selectMode === "list" &&
+      (!effect.selectedServer || !effect.selectedChannel)
+    ) {
+      errors.push("Select a server and channel from the list");
     }
     if (!effect.message?.length) {
       errors.push("Please insert a message to send");
@@ -84,42 +140,65 @@ export const SendMessageEffectType: Effects.EffectType<Props, unknown, void> = {
     return errors;
   },
   onTriggerEvent: async ({ effect, trigger }) => {
-    console.log(JSON.stringify(trigger));
-    logger.info(JSON.stringify(trigger));
-    switch (effect.selectMode) {
-      case "associated": {
-        if (!trigger.metadata.eventData.stoatChannelId) {
-          return {
-            success: false,
-          };
-        }
+    try {
+      const message = {
+        content: effect.message,
+        replies: !!effect.sendAsReply
+          ? [
+              {
+                id:
+                  (trigger.metadata.eventData?.stoatMessageId as string) ?? "",
+                mention: true,
+                fail_if_not_exists: false,
+              },
+            ]
+          : undefined,
+      };
+      switch (effect.selectMode) {
+        case "associated": {
+          if (!trigger.metadata.eventData?.stoatChannelId) {
+            throw new Error(
+              "Trigger metadata has no associated 'stoatChannelId'",
+            );
+          }
 
-        try {
-          const channel = await stoat.client?.channels.fetch(
+          const channel = await stoat?.channels.fetch(
             `${trigger.metadata.eventData.stoatChannelId}`,
           );
 
-          await channel.sendMessage(effect.message);
+          await channel?.sendMessage(message);
 
-          return { success: true };
-        } catch (error) {
-          return {
-            success: false,
-          };
+          break;
         }
+
+        case "list": {
+          if (!effect.selectedChannel) {
+            throw new Error("No channel selected to send Stoat message to");
+          }
+
+          await stoat?.channels
+            ?.get(effect.selectedChannel)
+            ?.sendMessage(message);
+
+          break;
+        }
+
+        // case "custom": {
+        //   return client
+        //     .findSession(effect.session)
+        //     ?.messages.sendChat(effect.message);
+        // }
       }
 
-      // case "list": {
-      //   return client.sessions
-      //     .get(effect.selectedSession)
-      //     ?.messages.sendChat(effect.message);
-      // }
+      return {
+        success: true,
+      };
+    } catch (error) {
+      firebot.logger.error("Error running Send Stoat Message effect", error);
 
-      // case "custom": {
-      //   return client
-      //     .findSession(effect.session)
-      //     ?.messages.sendChat(effect.message);
-      // }
+      return {
+        success: false,
+      };
     }
   },
 };

@@ -1,59 +1,86 @@
-import {
-  Firebot,
-  Integration,
-} from "@crowbartools/firebot-custom-scripts-types";
-import { initModules } from "@oceanity/firebot-helpers/firebot";
+import firebot, { Plugin, PluginContext } from "@crowbartools/firebot-types";
+import { Client } from "stoat.js";
 import {
   STOAT_EVENT_SOURCE,
   STOAT_INTEGRATION_AUTHOR,
-  STOAT_INTEGRATION_DEFINITION,
   STOAT_INTEGRATION_DESCRIPTION,
-  STOAT_INTEGRATION_FIREBOT_VERSION,
-  STOAT_INTEGRATION_ID,
-  STOAT_INTEGRATION_NAME_AND_AUTHOR,
+  STOAT_INTEGRATION_NAME,
   STOAT_INTEGRATION_VERSION,
+  STOAT_PLUGIN_ICON_BACKGROUND,
+  STOAT_PLUGIN_ICON_DATA_URI,
 } from "./constants";
 import { AllStoatEffectTypes } from "./effects";
-import { StoatIntegration } from "./stoat-integration";
-import { registerStoatVariables } from "./stoat-variables";
-import { StoatIntegrationSettings } from "./types";
+import { hookStoatFirebotEvents } from "./event-handler";
+import { AllStoatFrontendListeners } from "./frontend-listeners";
+import { AllStoatReplaceVariables } from "./replace-variables";
 
-export let stoat: StoatIntegration;
+export let stoat: Client | null = null;
 
-const script: Firebot.CustomScript<{}> = {
-  getScriptManifest: () => {
-    return {
-      name: STOAT_INTEGRATION_NAME_AND_AUTHOR,
-      description: STOAT_INTEGRATION_DESCRIPTION,
-      author: STOAT_INTEGRATION_AUTHOR,
-      version: STOAT_INTEGRATION_VERSION,
-      firebotVersion: STOAT_INTEGRATION_FIREBOT_VERSION,
-    };
+type Params = {
+  token: string;
+};
+
+const plugin: Plugin<Params> = {
+  manifest: {
+    name: STOAT_INTEGRATION_NAME,
+    description: STOAT_INTEGRATION_DESCRIPTION,
+    icon: {
+      type: "custom",
+      url: STOAT_PLUGIN_ICON_DATA_URI,
+      backgroundColor: STOAT_PLUGIN_ICON_BACKGROUND,
+    },
+    author: STOAT_INTEGRATION_AUTHOR,
+    version: STOAT_INTEGRATION_VERSION,
   },
-  getDefaultParameters: () => ({}),
-  run: (runRequest) => {
-    initModules(runRequest.modules);
-
-    stoat = new StoatIntegration();
-
-    runRequest.modules.eventManager.registerEventSource(STOAT_EVENT_SOURCE);
-
-    const integration: Integration<StoatIntegrationSettings> = {
-      definition: STOAT_INTEGRATION_DEFINITION,
-      integration: stoat,
-    };
-    runRequest.modules.integrationManager.registerIntegration(integration);
-
-    for (const effectType of AllStoatEffectTypes) {
-      effectType.definition.id = `${STOAT_INTEGRATION_ID}:${effectType.definition.id}`;
-      runRequest.modules.effectManager.registerEffect(effectType as any);
-    }
-
-    registerStoatVariables(
-      runRequest.modules.replaceVariableFactory,
-      runRequest.modules.replaceVariableManager,
-    );
+  parametersSchema: [
+    {
+      name: "token",
+      title: "Access Token",
+      description:
+        "Your Stoat Bot's access token (can be obtained by clicking 'Copy Token' in the Edit Bot menu)",
+      type: "string",
+      default: "",
+    },
+  ],
+  registers: {
+    effects: AllStoatEffectTypes,
+    eventSources: [STOAT_EVENT_SOURCE],
+    frontendListeners: AllStoatFrontendListeners,
+    variables: AllStoatReplaceVariables,
+  },
+  onLoad: async (context: PluginContext<Params>) => {
+    await connect(context);
+  },
+  onParameterUpdate: async (context: PluginContext<Params>) => {
+    await connect(context);
+  },
+  onUnload: async () => {
+    await disconnect();
   },
 };
 
-export default script;
+const connect = async (context: PluginContext<Params>) => {
+  disconnect();
+
+  try {
+    stoat = new Client();
+
+    await hookStoatFirebotEvents(stoat);
+
+    await stoat.loginBot(context.parameters.token);
+  } catch (error) {
+    firebot.logger.error("Error initializing Stoat client", error);
+  }
+};
+
+const disconnect = async () => {
+  if (!stoat) {
+    return;
+  }
+
+  stoat.removeAllListeners();
+
+  stoat = null;
+};
+
+export default plugin;
