@@ -1,5 +1,6 @@
 import firebot, { EffectType } from "@crowbartools/firebot-types";
 import { stoat } from "../main";
+import optionsTemplate from "./send-message.html";
 
 type EffectModel = {
   selectMode?: string;
@@ -19,55 +20,7 @@ export const SendMessageEffectType: EffectType<EffectModel> = {
     categories: ["integrations"],
     outputs: [],
   },
-  optionsTemplate: `
-    <eos-container header="Channel">
-      <firebot-select
-        options="selectModes"
-        selected="effect.selectMode"
-        style="margin-bottom: 20px;" />
-
-      <div ng-if="effect.selectMode === 'list'" style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 20px;">
-        <firebot-select
-          options="servers"
-          selected="effect.selectedServer"
-          on-update="getChannels()"
-          placeholder="Select a server..." />
-        <button class="btn btn-link" ng-click="getServers()">Refresh servers</button>
-      </div>
-
-      <div ng-if="effect.selectMode === 'list' && !!effect.selectedServer && !!channels" style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 20px;">
-        <firebot-select
-          options="channels"
-          selected="effect.selectedChannel"
-          placeholder="Select a channel..." />
-        <button class="btn btn-link" ng-click="getChannels()">Refresh channels</button>
-      </div>
-
-      <div ng-if="effect.selectMode === 'custom'" style="margin-bottom: 20px;">
-        <firebot-input
-          model="effect.session"
-          placeholder-text="Enter session name, slot name or hostname (will use first match)"
-          menu-position="under" />
-      </div>
-    </eos-container>
-
-    <eos-container header="Text" pad-top="true">
-      <firebot-input
-        model="effect.message"
-        use-text-area="true"
-        placeholder-text="Chat message"
-        rows="3"
-        cols="40" />
-
-      <div style="display: flex; flex-direction: row; gap: 10px 20px; flex-wrap: wrap; margin: 10px 0;">
-        <firebot-checkbox
-          ng-if="isMessageEvent"
-          label="Send as reply"
-          model="effect.sendAsReply"
-          tooltip="Sends as a reply to the associated Stoat message from the Message event" />
-      </div>
-    </eos-container>
-  `,
+  optionsTemplate,
   optionsController: ($scope, backendCommunicator: any) => {
     $scope.isMessageEvent =
       $scope.trigger === "event" &&
