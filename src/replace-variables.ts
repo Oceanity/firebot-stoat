@@ -24,7 +24,8 @@ function buildStoatVariables(
 ): Array<ReplaceVariable> {
   return definitions.map(([name, description]) => {
     const eventProperty = `${prefix}${name}`;
-    return firebot.variableFactory.createEventDataVariable({
+    //@ts-expect-error(2339)
+    return firebot.factories.variables.createEventDataVariable({
       handle: eventProperty,
       description,
       events: events.map((event) => `${STOAT_INTEGRATION_ID}:${event}`),
